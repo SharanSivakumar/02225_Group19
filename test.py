@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Task:
     def __init__(self, name, wcet, bcet, priority, deadline, period):
         self.name = name
-        self.wcet = wcet   # Worst-case execution time
-        self.bcet = bcet   # Best-case execution time
+        self.wcet = wcet   
+        self.bcet = bcet   
         self.priority = priority
         self.deadline = deadline
         self.period = period
@@ -26,8 +27,7 @@ def read_tasks_from_csv(file_path):
             period=row['Period']
         )
         tasks.append(task)
-    # Sort tasks by priority (lower number means higher priority)
-    tasks.sort(key=lambda x: x.priority)
+        tasks.sort(key=lambda x: x.priority)
     return tasks
 
 def response_time_analysis(tasks):
@@ -35,54 +35,68 @@ def response_time_analysis(tasks):
     response_times = [0] * n
 
     for i in range(n):
-        response_times[i] = tasks[i].wcet  # Initial response time is WCET
+        response_times[i] = tasks[i].wcet  
         for j in range(i):
             response_times[i] += np.ceil(response_times[i] / tasks[j].period) * tasks[j].wcet
         if response_times[i] > tasks[i].deadline:
             return False, response_times
     return True, response_times
 
-def simple_simulator(tasks, simulation_time):
+def simple_simulator(tasks):
     time = 0
     execution_history = []
-    remaining_time = {task.name: task.wcet for task in tasks}
-    wcrt = {task.name: 0 for task in tasks}  # Dictionary to keep track of worst-case response times
-    task_completions = {task.name: 0 for task in tasks}  # Task completion time tracking
+    remaining_time = {task.name: 0 for task in tasks}  
+    wcrt = {task.name: 0 for task in tasks} 
+    task_completions = {task.name: 0 for task in tasks}  
+    max_time = 50000  
+    executed_tasks = set()
+    
+    while time < max_time:
 
-    while time < simulation_time:
-        # Determine the highest priority task that is ready to run
-        runnable_tasks = [task for task in tasks if time % task.period == 0 or remaining_time[task.name] < task.wcet]
+        for task in tasks:
+            if time % task.period == 0:
+                remaining_time[task.name] = task.wcet  
+                executed_tasks.add(task.name)         
+
+        runnable_tasks = [task for task in tasks if remaining_time[task.name] > 0]
         if runnable_tasks:
-            # Select the highest priority task
             next_task = min(runnable_tasks, key=lambda x: x.priority)
-            if remaining_time[next_task.name] > 0:
-                execution_history.append(next_task.name)
-                remaining_time[next_task.name] -= 1
-            else:
-                execution_history.append("Idle")
+            execution_history.append(next_task.name)
+            remaining_time[next_task.name] -= 1
         else:
             execution_history.append("Idle")
 
-        # Increment time
         time += 1
 
-        # Reset remaining time for periodic tasks at each period boundary
-        for task in tasks:
-            if time % task.period == 0:
-                # Log completion time for WCRT calculation
-                task_completions[task.name] = time  # Update completion time
-                remaining_time[task.name] = task.wcet  # Reset remaining time for periodic tasks
 
-        # Condition to calculate WCRT
         for task in tasks:
             if remaining_time[task.name] == 0 and time > task_completions[task.name]:
                 response_time = task_completions[task.name] - (time - task.period)
-                # Update the worst-case response time
                 wcrt[task.name] = max(wcrt[task.name], response_time)
-
+        
+        if time > max([task.period for task in tasks]) * 2:
+            break
+    
     return execution_history, wcrt
 
-def main(file_path, simulation_time=20):
+def plot_gantt_chart(execution_history):
+    fig, ax = plt.subplots(figsize=(10, 5))
+    tasks = sorted(set(execution_history))
+    task_positions = {task: i for i, task in enumerate(tasks)}
+    
+    for time, task in enumerate(execution_history):
+        if task != "Idle":
+            ax.broken_barh([(time, 1)], (task_positions[task], 0.8), facecolors='tab:blue')
+    
+    ax.set_xlabel('Time Units')
+    ax.set_ylabel('Tasks')
+    ax.set_yticks(range(len(tasks)))
+    ax.set_yticklabels(tasks)
+    ax.set_title('Task Scheduling Timeline')
+    ax.grid(True)
+    plt.show()
+
+def main(file_path):
     tasks = read_tasks_from_csv(file_path)
     print("Tasks Loaded:", tasks)
     
@@ -92,9 +106,12 @@ def main(file_path, simulation_time=20):
     else:
         print("Tasks are not schedulable. Response Times:", response_times)
 
-    execution_history, wcrt = simple_simulator(tasks, simulation_time)
-    print("Execution History:", execution_history)
+    execution_history, wcrt = simple_simulator(tasks)
+    print("Execution History (first 100):", execution_history[:100])  
     print("Worst-Case Response Times (WCRT):", wcrt)
+    
+
+    plot_gantt_chart(execution_history[:400])
 
 if __name__ == "__main__":
-    main(r"C:\Users\shara\Downloads\exercise-TC3 - Copy.csv", simulation_time=20)
+    main("TC3.csv")
