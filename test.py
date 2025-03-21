@@ -36,12 +36,12 @@ def read_tasks_from_csv(file_path):
         )
         tasks.append(task)
     
-    # Ensure tasks are sorted by priority (lower number = higher priority)
+    
     tasks.sort(key=lambda x: x.priority)
     return tasks
 
 def response_time_analysis(tasks):
-    """ Implements RTA correctly """
+    
     response_times = {task.name: task.wcet for task in tasks}
 
     for i, task in enumerate(tasks):
@@ -52,7 +52,7 @@ def response_time_analysis(tasks):
             R_old = R
             I = sum(
                 np.ceil(R / tasks[j].period) * tasks[j].wcet
-                for j in range(i)  # Sum interference from higher-priority tasks
+                for j in range(i)  
             )
             R = task.wcet + I  
 
