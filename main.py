@@ -1,11 +1,8 @@
 import pandas as pd
 import numpy as np
-
+import matplotlib.pyplot as plt
 from math import gcd
 from functools import reduce
-
-
-import matplotlib.pyplot as plt
 
 def lcm(numbers):
     return reduce(lambda x, y: (x * y) // gcd(x, y), numbers)
@@ -35,60 +32,64 @@ def read_tasks_from_csv(file_path):
             period=row['Period']
         )
         tasks.append(task)
-    
-    
     tasks.sort(key=lambda x: x.priority)
     return tasks
 
 def response_time_analysis(tasks):
-    
-    response_times = {task.name: task.wcet for task in tasks}
+    response_times = {}
+    schedulable = True
 
     for i, task in enumerate(tasks):
-        R_old = 0
-        R = task.wcet  
-        
-        while R != R_old:  
-            R_old = R
-            I = sum(
+        R = task.wcet
+        while True:
+            interference = sum(
                 np.ceil(R / tasks[j].period) * tasks[j].wcet
-                for j in range(i)  
+                for j in range(i)
             )
-            R = task.wcet + I  
+            R_next = task.wcet + interference
 
-            if R > task.deadline:
-                return False, response_times  
+            if R_next > task.deadline:
+                response_times[task.name] = R_next
+                schedulable = False
+                break  
+            if R_next == R:
+                break
 
-        response_times[task.name] = R
+            R = R_next
+        if task.name not in response_times:
+            response_times[task.name] = R
 
-    return True, response_times
+    return schedulable, response_times
+
+
 
 def simple_simulator(tasks, max_time=500):
     time = 0
     execution_history = []
     remaining_time = {task.name: 0 for task in tasks}  
     wcrt = {task.name: 0 for task in tasks}  
+    release_times = {task.name: [] for task in tasks}
+    start_times = {}
 
     while time < max_time:
         for task in tasks:
             if time % task.period == 0:
-                remaining_time[task.name] = task.wcet  
+                remaining_time[task.name] = task.wcet
+                release_times[task.name].append(time)
+                start_times[task.name] = time
 
         runnable_tasks = [task for task in tasks if remaining_time[task.name] > 0]
         if runnable_tasks:
             next_task = min(runnable_tasks, key=lambda x: x.priority)
             execution_history.append(next_task.name)
-            remaining_time[next_task.name] -= 1  
+            remaining_time[next_task.name] -= 1
+            if remaining_time[next_task.name] == 0:
+                rt = time - start_times[next_task.name] + 1
+                wcrt[next_task.name] = max(wcrt[next_task.name], rt)
         else:
             execution_history.append("Idle")
 
         time += 1
-
-    
-        for task in tasks:
-            if remaining_time[task.name] == 0:
-                response_time = time - (task.period * (time // task.period))
-                wcrt[task.name] = max(wcrt[task.name], response_time)
 
     return execution_history, wcrt
 
@@ -109,24 +110,52 @@ def plot_gantt_chart(execution_history):
     ax.grid(True)
     plt.show()
 
+def get_hyperperiod(tasks):
+    return lcm([task.period for task in tasks])
+
+def get_total_utilization(tasks):
+    return round(sum(task.wcet / task.period for task in tasks), 2)
+
 def main(file_path):
     tasks = read_tasks_from_csv(file_path)
-    print("Tasks Loaded:", tasks)
-    
+    hyperperiod = get_hyperperiod(tasks)
+    utilization = get_total_utilization(tasks)
+    print("TaskSet:")
+    print(f"Hyperperiod = {hyperperiod}")
+    print(f"CPU Worst Case Utilization = {utilization:.2f}")
+    for task in tasks:
+        task_util = round(task.wcet / task.period, 2)
+        print(f"Task({task.name}, BCET={task.bcet}, WCET={task.wcet}, Period={task.period}, "
+              f"Deadline={task.deadline}, Utilization={task_util:.2f} Core=0, "
+              f"Priority={task.priority}, Type=TT, MIT=0, Server=None)")
+
     is_schedulable, response_times = response_time_analysis(tasks)
-    if is_schedulable:
-        print("All tasks are schedulable.")
-    else:
-        print("Tasks are not schedulable. Response Times:", response_times)
 
-    max_time = lcm([task.period for task in tasks])
-    execution_history, wcrt = simple_simulator(tasks, max_time)
+    print("\nResponse Time Analysis")
+    print("  Scheduling Algorithm: RateMonotonic")
+    print(f"  Schedulable: {'True' if is_schedulable else 'False'}")
+    print(f"  Hyperperiod: {hyperperiod}")
+    print(f"  Utilization: {utilization:.2f}")
+    print("  Status: (✓=schedulable, ✗=not schedulable)\n")
 
-    print("Execution History (first 100):", execution_history[:100])  
-    print("Worst-Case Response Times (WCRT):", wcrt)
+    print(f"{'Task':<5} {'WCRT':>6} {'Deadline':>9}  {'Status'}")
+    print(f"{'-'*5} {'-'*6} {'-'*9}  {'-'*6}")
+
+    for task in tasks:
+        rt = response_times[task.name]
+        status = "✓" if rt <= task.deadline else "✗"
+        print(f"{task.name:<5} {rt:>6} {task.deadline:>9}  {status}")
+
+    print(f"{'-'*5} {'-'*6} {'-'*9}  {'-'*6}")
+
     
-    plot_gantt_chart(execution_history)
+    print("\n--- Simulation (VSS) Results ---")
+    execution_history, wcrt = simple_simulator(tasks, hyperperiod)
+    print("Execution History (first 100):", execution_history[:100])
+    print("Worst-Case Response Times (WCRT):")
+    for task in tasks:
+        print(f"{task.name}: {wcrt[task.name]}")
+    plot_gantt_chart(execution_history[:1000])
 
 if __name__ == "__main__":
-    main("TC2.csv")
-
+    main("./Test Cases/TC1.csv")
