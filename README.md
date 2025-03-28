@@ -14,4 +14,4 @@ This project implements a fixed-priority preemptive scheduler using Rate Monoton
 Run the following command from the terminal:
 
 ```bash
-python main.py "Test cases/TC2.csv"
+python main.py "Test cases/<file name>"
