@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
 from math import gcd
 from functools import reduce
 
@@ -158,4 +159,8 @@ def main(file_path):
     plot_gantt_chart(execution_history[:1000])
 
 if __name__ == "__main__":
-    main("./Test Cases/TC1.csv")
+    if len(sys.argv) != 2:
+        print("Please Provide the path to the Input Task list CSV file")
+    else:
+        file_path = sys.argv[1]
+        main(file_path)
