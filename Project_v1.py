@@ -1,4 +1,4 @@
-import json, math
+import csv
 from math import gcd, ceil, floor
 from functools import reduce
 import matplotlib.pyplot as plt
@@ -50,23 +50,44 @@ class Core:
         return f"Core({self.name}, Speed={self.speed}, Components={len(self.components)})"
 
 
-def load_system_model(json_path):
-    with open(json_path, 'r') as f:
-        data = json.load(f)
-
-    cores = {cid: Core(cid, cdata["speed"]) for cid, cdata in data["cores"].items()}
-
-    tasks = {}
-    for tid, t in data["tasks"].items():
-        tasks[tid] = Task(tid, t["wcet"], t["bcet"], t["deadline"], t["period"], t["priority"])
+def load_system_model_from_csv(task_file, arch_file, budget_file):
+    cores = {}
+    with open(arch_file, newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            core_id = row["core_id"]
+            speed = float(row["speed_factor"])
+            cores[core_id] = Core(core_id, speed)
 
     components = {}
-    for comp_id, comp_data in data["components"].items():
-        comp = Component(comp_id, comp_data["core"], comp_data["scheduling"], comp_data["bdr"])
-        for tid in comp_data["tasks"]:
-            comp.add_task(tasks[tid])
-        components[comp_id] = comp
-        cores[comp_data["core"]].add_component(comp)
+    with open(budget_file, newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            comp_id = row["component_id"]
+            core_id = row["core_id"]
+            scheduler = row["scheduler"]
+            budget = float(row["budget"])
+            period = float(row["period"])
+            alpha = budget / period
+            delta = 0  #DELTA VALUES HAVE TO BE Checked Important! We should do this before the final version is decided!
+            comp = Component(comp_id, core_id, scheduler, {"alpha": alpha, "delta": delta})
+            components[comp_id] = comp
+            cores[core_id].add_component(comp)
+    tasks = {}
+    with open(task_file, newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            task_name = row["task_name"]
+            wcet = float(row["wcet"])
+            bcet = float(row["bcet"]) if "bcet" in row and row["bcet"] else wcet
+            deadline = float(row["deadline"]) if "deadline" in row and row["deadline"] else float(row["period"])
+            period = float(row["period"])
+            priority = int(row["priority"]) if row["priority"] else 0
+            comp_id = row["component_id"]
+
+            task = Task(task_name, wcet, bcet, deadline, period, priority)
+            tasks[task_name] = task
+            components[comp_id].add_task(task)
 
     return {
         "cores": cores,
@@ -74,56 +95,48 @@ def load_system_model(json_path):
         "tasks": tasks
     }
 
-def plot_dbf_sbf(component, dbf_func, alpha, delta, max_time=100):
-    times = np.arange(0, max_time, 1)
-    dbf_vals = []
-    sbf_vals = []
+def export_solution_csv(system, response_times, filename=".\Output\solution.csv"):
+    task_results = []
+    
+    for task in system["tasks"].values():
+        rts = response_times.get(task.name, [])
+        avg_rt = round(sum(rts)/len(rts), 2) if rts else 0.0
+        max_rt = round(max(rts), 2) if rts else 0.0
+        schedulable = 1 if rts and max_rt <= task.deadline else 0
+        comp_id = next(comp.name for comp in system["components"].values() if task in comp.tasks)
 
-    for t in times:
-        if component.scheduling == "EDF":
-            dbf = dbf_func(component.tasks, t)
-        else:  # FPS
-            dbf = max(dbf_func(component.tasks, t, τ) for τ in component.tasks)
-        sbf = max(0, alpha * (t - delta))
-        dbf_vals.append(dbf)
-        sbf_vals.append(sbf)
+        task_results.append({
+            "task_name": task.name,
+            "component_id": comp_id,
+            "task_schedulable": schedulable,
+            "avg_response_time": avg_rt,
+            "max_response_time": max_rt
+        })
 
-    plt.figure(figsize=(8, 4))
-    plt.plot(times, dbf_vals, label="DBF", color='blue')
-    plt.plot(times, sbf_vals, label="SBF", color='green')
-    plt.title(f"DBF vs SBF for {component.name} ({component.scheduling})")
-    plt.xlabel("Time")
-    plt.ylabel("Cumulative Resource Demand / Supply")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    component_schedulable = {}
+    for comp in system["components"].values():
+        comp_tasks = [res for res in task_results if res["component_id"] == comp.name]
+        all_schedulable = all(t["task_schedulable"] == 1 for t in comp_tasks)
+        component_schedulable[comp.name] = 1 if all_schedulable else 0
 
-def plot_gantt_chart(execution_log):
-    fig, ax = plt.subplots(figsize=(12, 5))
+    with open(filename, mode='w', newline='') as csvfile:
+        fieldnames = [
+            "task_name", "component_id", "task_schedulable",
+            "avg_response_time", "max_response_time", "component_schedulable"
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
 
-    cores = list(execution_log[0].keys())
-    core_positions = {core: i for i, core in enumerate(cores)}
+        for row in task_results:
+            row["component_schedulable"] = component_schedulable[row["component_id"]]
+            writer.writerow(row)
 
-    for t, tick in enumerate(execution_log):
-        for core, task in tick.items():
-            if task != "Idle":
-                ax.broken_barh([(t, 1)], (core_positions[core], 0.9), facecolors='#0eede2')
-                ax.text(t + 0.1, core_positions[core] + 0.3, task, fontsize=7)
-
-    ax.set_yticks(list(core_positions.values()))
-    ax.set_yticklabels(cores)
-    ax.set_xlabel("Time")
-    ax.set_title("Gantt Chart: Core Execution Timeline")
-    ax.grid(True)
-    plt.tight_layout()
-    plt.show()
+    print(f"\n Exported results to '{filename}'")
 
 def lcm(numbers):
     return reduce(lambda x, y: (x * y) // gcd(int(x), int(y)), numbers)
 
 def half_half_transform(alpha, delta):
-    
     P = max(1, ceil(delta / alpha))  
     Csupply = ceil(alpha * P / 2)
     Tsupply = floor(P / 2)
@@ -131,11 +144,9 @@ def half_half_transform(alpha, delta):
 
 def run_simulation(system, max_time=None):
     cores = system["cores"]
-
     all_periods = [task.period for task in system["tasks"].values()]
-    sim_time = lcm(all_periods) if max_time is None else max_time
+    sim_time = int(lcm(all_periods)) if max_time is None else int(max_time)
     print(f"Simulating up to time = {sim_time} units")
-
 
     execution_log = []
     response_times = defaultdict(list)
@@ -147,54 +158,43 @@ def run_simulation(system, max_time=None):
 
         for core in cores.values():
             core_speed = core.speed
-            selected_task = None
-            min_priority = float("inf")
-            earliest_deadline = float("inf")
-
+            active_candidates = []
             for comp in core.components:
                 if time < comp.bdr_delta:
-                    continue  
-                
-                allocated_ticks = int(math.floor(comp.bdr_alpha * (time - comp.bdr_delta + 1)))
+                    continue
 
-                active_tasks = []
                 for task in comp.tasks:
                     if time % task.period == 0:
                         released_tasks[task.name].append(time)
                         task_state[task.name] = {"remaining": task.wcet, "start": None}
-
+                        
                     if task.name in task_state and task_state[task.name]["remaining"] > 0:
-                        active_tasks.append(task)
+                        active_candidates.append((task, comp))
 
-                if not active_tasks:
-                    continue
+            if not active_candidates:
+                tick_log[core.name] = "Idle"
+                continue
 
-                if comp.scheduling == "FPS":
-                    active_tasks.sort(key=lambda t: t.priority)
-                elif comp.scheduling == "EDF":
-                    active_tasks.sort(key=lambda t: time + t.deadline - (time % t.period))
+            if core.components[0].scheduling == "FPS":
+                active_candidates.sort(key=lambda x: x[0].priority)
+            elif core.components[0].scheduling == "EDF":
+                active_candidates.sort(key=lambda x: time + x[0].deadline - (time % x[0].period))
 
-                task = active_tasks[0]
-                task_state[task.name]["remaining"] -= core_speed  
-                if task_state[task.name]["start"] is None:
-                    task_state[task.name]["start"] = time
+            selected_task, selected_comp = active_candidates[0]
+            task_state[selected_task.name]["remaining"] -= core_speed
+            if task_state[selected_task.name]["start"] is None:
+                task_state[selected_task.name]["start"] = time
 
-                selected_task = task
-                break  
+            tick_log[core.name] = selected_task.name
 
-            tick_log[core.name] = selected_task.name if selected_task else "Idle"
-
-    
-            if selected_task and task_state[selected_task.name]["remaining"] <= 0:
+            if task_state[selected_task.name]["remaining"] <= 0:
                 release = released_tasks[selected_task.name].pop(0)
-                start = task_state[selected_task.name]["start"]
                 rt = time - release + 1
                 response_times[selected_task.name].append(rt)
                 del task_state[selected_task.name]
 
         execution_log.append(tick_log)
 
-    
     print("\n--- SIMULATION RESULTS ---")
     for task in system["tasks"].values():
         rts = response_times[task.name]
@@ -202,7 +202,7 @@ def run_simulation(system, max_time=None):
             print(f"{task.name}: Avg RT = {sum(rts)/len(rts):.2f}, Max RT = {max(rts)}")
         else:
             print(f"{task.name}: Not executed")
-    
+
     print("\n--- WORST-CASE RESPONSE TIMES (WCRT) ---")
     for task in system["tasks"].values():
         rts = response_times[task.name]
@@ -211,7 +211,7 @@ def run_simulation(system, max_time=None):
             print(f"{task.name}: WCRT = {wcrt}  |  Deadline = {task.deadline}  =>  {'✓' if wcrt <= task.deadline else '✗'}")
         else:
             print(f"{task.name}: No RT recorded")
-            
+
     print("\n--- RESOURCE UTILIZATION PER COMPONENT ---")
     total_sim_time = sim_time
     for core in cores.values():
@@ -221,8 +221,8 @@ def run_simulation(system, max_time=None):
                 if cname == core.name and any(t.name == tname for t in comp.tasks)
             )
             utilization = comp_exec_time / total_sim_time
-            print(f"Component {comp.name} on {core.name}: Utilization = {utilization:.2f}")    
-    
+            print(f"Component {comp.name} on {core.name}: Utilization = {utilization:.2f}")
+
     return execution_log, response_times
 
 
@@ -237,10 +237,8 @@ def sbf_bdr(alpha, delta, t):
     return max(0, alpha * (t - delta))
 
 def find_min_bdr_params(tasks, scheduling, max_time=100):
-    best_alpha, best_delta = None, None
-
     for delta in range(0, max_time + 1):
-        for alpha in np.linspace(0.1, 1.0, 100):  
+        for alpha in np.linspace(0.1, 1.0, 100):
             ok = True
             for t in range(1, max_time + 1):
                 if scheduling == "EDF":
@@ -259,19 +257,16 @@ def run_analysis(system):
     print("\n--- STATIC SCHEDULABILITY ANALYSIS ---")
     for comp in system["components"].values():
         print(f"\nComponent {comp.name} on Core {comp.core_name} using {comp.scheduling}")
-
         alpha, delta = find_min_bdr_params(comp.tasks, comp.scheduling)
-
         if alpha is None:
             print("No schedulable BDR interface found!")
         else:
             print(f"BDR Interface: α = {alpha}, ∆ = {delta}")
             Csupply, Tsupply = half_half_transform(alpha, delta)
             print(f"Supply Task: Csupply = {Csupply}, Tsupply = {Tsupply}")
-                               
-            
+
 def main():
-    system = load_system_model("input/system_config.json")
+    system = load_system_model_from_csv("input/tasks.csv", "input/architecture.csv", "input/budgets.csv")
 
     print("=== System Overview ===")
     for core in system["cores"].values():
@@ -280,14 +275,15 @@ def main():
             print("  ", comp)
             for task in comp.tasks:
                 print("    ", task)
+
     print("\n--- Running Simulation ---")
     run_simulation(system)
-    
+
     print("\n--- Running Static Analysis ---")
     run_analysis(system)
-    execution_log, _ = run_simulation(system)
-    plot_gantt_chart(execution_log)
-    
-    
+
+    execution_log, response_times = run_simulation(system)
+    export_solution_csv(system, response_times)
+
 if __name__ == "__main__":
     main()
