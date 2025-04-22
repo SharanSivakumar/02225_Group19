@@ -1,0 +1,104 @@
+Test Case Generator for Real-Time System Simulator:
+
+Overview:
+
+This tool generates randomized, valid test case JSON files for use with your real-time system simulator. Each test case describes a system with multiple processing cores, tasks, and components, following the structure required by your simulation tool.
+
+Features:
+
+Customizable: Easily adjust the number of cores, components, and tasks per component.
+
+Valid Output: Ensures deadlines ≤ periods, BCET ≤ WCET, and unique task assignments.
+
+Realistic Parameters: Randomizes core speeds, task timing, priorities, and scheduling policies within sensible ranges.
+
+Easy Integration: Output files are ready to use with your simulator.
+
+Requirements:
+
+Python 3.x
+
+Getting Started:
+
+1. Clone or Download
+Copy the test_case_generator.py script into your project directory.
+
+2. Usage
+You can run the generator directly from the command line or import it into your Python scripts.
+
+A. Command Line Example:
+
+python:
+python test_case_generator.py
+
+This will generate a file named generated_test_case.json in your current directory with default settings.
+
+B. Custom Generation in Python:
+
+You can also import and call the generator with custom settings:
+
+python:
+from test_case_generator import generate_test_case
+
+# Generate a test case with 3 cores, 4 components, and 2 tasks per component
+generate_test_case("custom_test_case.json", num_cores=3, tasks_per_component=2, num_components=4)
+
+3. Output:
+
+The generator creates a JSON file structured like this:
+
+json:
+
+{
+  "cores": {
+    "CoreA": { "speed": 1.0 },
+    "CoreB": { "speed": 0.5 }
+  },
+  "tasks": {
+    "T1": { "wcet": 2, "bcet": 1, "deadline": 10, "period": 10, "priority": 1 },
+    ...
+  },
+  "components": {
+    "Comp1": {
+      "core": "CoreA",
+      "scheduling": "EDF",
+      "bdr": { "alpha": 0.6, "delta": 3 },
+      "tasks": ["T1", "T2"]
+    },
+    ...
+  }
+}
+
+
+4. Parameters:
+
+You can control the following parameters:
+
+output_file: Name of the generated JSON file.
+
+num_cores: Number of processing cores.
+
+tasks_per_component: Number of tasks assigned to each component.
+
+num_components: Number of components in the system.
+
+5. Customization:
+
+To change value ranges (e.g., core speed, period, BDR parameters), edit the relevant lines in the script.
+
+6. Using with Your Simulator:
+
+Once generated, use the output JSON file as an input to your simulator tool as you would with any hand-crafted test case.
+
+Troubleshooting:
+
+Invalid JSON: The generator ensures valid structure, but if you modify the script, use a JSON validator to check the output.
+
+Parameter Errors: Ensure that tasks_per_component * num_components does not exceed the number of unique tasks you wish to generate.
+
+License:
+
+This tool is provided as-is, for internal testing and development purposes.
+
+Enjoy automated, robust test case generation for your real-time system simulations!
+

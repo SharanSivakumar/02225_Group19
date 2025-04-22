@@ -1,0 +1,66 @@
+{
+  "cores": {
+    "CoreA": {
+      "speed": 1.9
+    },
+    "CoreB": {
+      "speed": 1.7
+    }
+  },
+  "tasks": {
+    "T1": {
+      "wcet": 2,
+      "bcet": 2,
+      "deadline": 13,
+      "period": 25,
+      "priority": 2
+    },
+    "T2": {
+      "wcet": 2,
+      "bcet": 2,
+      "deadline": 30,
+      "period": 50,
+      "priority": 3
+    },
+    "T3": {
+      "wcet": 1,
+      "bcet": 1,
+      "deadline": 5,
+      "period": 5,
+      "priority": 3
+    },
+    "T4": {
+      "wcet": 3,
+      "bcet": 1,
+      "deadline": 6,
+      "period": 10,
+      "priority": 1
+    }
+  },
+  "components": {
+    "Comp1": {
+      "core": "CoreB",
+      "scheduling": "EDF",
+      "bdr": {
+        "alpha": 0.6,
+        "delta": 3
+      },
+      "tasks": [
+        "T4",
+        "T2"
+      ]
+    },
+    "Comp2": {
+      "core": "CoreB",
+      "scheduling": "EDF",
+      "bdr": {
+        "alpha": 0.7,
+        "delta": 4
+      },
+      "tasks": [
+        "T3",
+        "T1"
+      ]
+    }
+  }
+}
