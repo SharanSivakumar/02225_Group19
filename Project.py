@@ -146,7 +146,7 @@ def half_half_transform(alpha, delta):
         delta = 1e-6  # Avoid divide by zero
     Tsupply = delta / (2 * (1 - alpha))
     Csupply = alpha * Tsupply
-    return max(1, ceil(Csupply)), max(1, ceil(Tsupply))  # Safe lower bound
+    return max(1, ceil(Csupply)), max(1, ceil(Tsupply))  # so Delta is always > 0 and Code doesnt end up breaking! Need to check this!
 
 def run_simulation(system, max_time=None):
     cores = system["cores"]
@@ -154,7 +154,6 @@ def run_simulation(system, max_time=None):
     sim_time = int(lcm(all_periods)) if max_time is None else int(max_time)
     print(f"Simulating up to time = {sim_time} units")
 
-    # Step 1: Compute and track supply tasks (Csupply, Tsupply) for each component
     component_supply_info = {}
     for comp in system["components"].values():
         alpha, delta = comp.bdr_alpha, comp.bdr_delta
@@ -163,12 +162,11 @@ def run_simulation(system, max_time=None):
             component_supply_info[comp.name] = {
                 "Csupply": Csupply,
                 "Tsupply": Tsupply,
-                "budget_left": Csupply,  # Initial budget is full
+                "budget_left": Csupply,  
                 "last_replenish": 0
             }
         except ValueError as e:
             print(f"Warning: Could not transform BDR for {comp.name}: {e}")
-            # Fallback to full resource availability
             component_supply_info[comp.name] = {
                 "Csupply": 100,
                 "Tsupply": 100,
@@ -181,64 +179,52 @@ def run_simulation(system, max_time=None):
     released_tasks = defaultdict(list)
     task_state = {}
 
-    # Pre-adjust task WCETs based on core speed
+
     adjusted_wcets = {}
     for task_name, task in system["tasks"].items():
-        # Find which core this task is assigned to
         comp_id = next(comp.name for comp in system["components"].values() if task in comp.tasks)
         comp = system["components"][comp_id]
         core = system["cores"][comp.core_name]
-        # Adjust WCET: slower cores (speed < 1) increase execution time
         adjusted_wcets[task_name] = task.wcet / core.speed
 
     for time in range(sim_time):
         tick_log = {}
 
         for core in cores.values():
-            tick_log[core.name] = "Idle"  # Default to idle
+            tick_log[core.name] = "Idle"  # Default state!
             
-            # Group tasks by component for correct per-component scheduling
             component_candidates = {}
             
             for comp in core.components:
                 if comp.bdr_alpha is None:
                     if time == 0:
-                        print(f"⏩ Skipping simulation for component {comp.name} — unschedulable by analysis.")
+                        print(f"Skipping simulation for component {comp.name} — unschedulable by analysis.")
                     continue
 
                 supply = component_supply_info[comp.name]
                 
-                # Step 2: Replenish budget if new supply period starts
                 if (time - supply["last_replenish"]) >= supply["Tsupply"]:
                     supply["budget_left"] = supply["Csupply"]
                     supply["last_replenish"] = time
                 
-                # Step 3: Enforce delay constraint ∆
                 if time < comp.bdr_delta:
                     continue
-                
-                # Step 4: Skip component if out of budget
                 if supply["budget_left"] <= 0:
                     continue
-                
-                # Collect candidate tasks for this component
+
                 active_tasks = []
                 
                 for task in comp.tasks:
-                    # Release new task instances at period boundaries
                     if time % task.period == 0:
                         released_tasks[task.name].append(time)
-                        # Use adjusted WCET
                         task_state[task.name] = {
                             "remaining": adjusted_wcets[task.name],
                             "start": None
                         }
                     
-                    # Add active tasks to candidates
                     if task.name in task_state and task_state[task.name]["remaining"] > 0:
                         active_tasks.append(task)
-                
-                # Sort tasks according to the component's scheduling policy
+               
                 if active_tasks:
                     if comp.scheduling == "FPS":
                         active_tasks.sort(key=lambda x: x.priority)
@@ -247,26 +233,22 @@ def run_simulation(system, max_time=None):
                     
                     component_candidates[comp.name] = (comp, active_tasks[0])
             
-            # If no component has active tasks, continue to next core
+           
             if not component_candidates:
                 continue
-            
-            # Select component based on some policy (e.g., first-come-first-served)
-            # You could implement a more sophisticated component selection algorithm here
             selected_comp_name, (selected_comp, selected_task) = next(iter(component_candidates.items()))
             
-            # Execute task for one time unit
             task_state[selected_task.name]["remaining"] -= 1.0
             if task_state[selected_task.name]["start"] is None:
                 task_state[selected_task.name]["start"] = time
             
-            # Deduct budget from component
+   
             component_supply_info[selected_comp.name]["budget_left"] -= 1.0
             
-            # Record execution
+        
             tick_log[core.name] = selected_task.name
             
-            # Check if task completed
+         
             if task_state[selected_task.name]["remaining"] <= 0:
                 release = released_tasks[selected_task.name].pop(0)
                 rt = time - release + 1
@@ -275,7 +257,7 @@ def run_simulation(system, max_time=None):
 
         execution_log.append(tick_log)
 
-    # Reporting
+    
     print("\n--- SIMULATION RESULTS ---")
     for task in system["tasks"].values():
         rts = response_times.get(task.name, [])
@@ -357,11 +339,10 @@ def try_reassign_components(system):
         best_core = current_core
         best_schedulable = False
 
-        # Temporarily remove from current core
+    
         current_core.components.remove(comp)
 
         for core in cores:
-            # Try assigning to this core
             core.add_component(comp)
             bdrs = [(c.bdr_alpha, c.bdr_delta) for c in core.components]
 
@@ -370,12 +351,10 @@ def try_reassign_components(system):
             if schedulable:
                 best_core = core
                 best_schedulable = True
-                break  # Found valid placement, stop early
+                break  
 
-            # Undo test placement
             core.components.remove(comp)
 
-        # Finalize assignment
         best_core.add_component(comp)
         comp.core_name = best_core.name
 
@@ -402,7 +381,6 @@ def run_analysis(system):
             comp.bdr_delta = delta
             comp.bdr_updated = True
 
-        # Group BDR results per core for Theorem 1 check
         core_bdr_summary.setdefault(comp.core_name, []).append((comp.bdr_alpha, comp.bdr_delta))
 
     print("\n--- VALIDATING CORES WITH THEOREM 1 (Feng and Mok) ---")
