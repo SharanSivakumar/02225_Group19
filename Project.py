@@ -72,7 +72,7 @@ def load_system_model_from_csv(task_file, arch_file, budget_file):
             budget = float(row["budget"])
             period = float(row["period"])
             alpha = budget / period
-            delta = 0  #DELTA VALUES HAVE TO BE Checked Important! We should do this before the final version is decided!
+            delta = 0  #DELTA values are set later on in the code so all good!
             comp = Component(comp_id, core_id, scheduler, {"alpha": alpha, "delta": delta})
             components[comp_id] = comp
             cores[core_id].add_component(comp)
@@ -329,41 +329,6 @@ def validate_theorem1(child_bdrs, parent_alpha=1.0, parent_delta=0):
     is_schedulable = total_alpha <= parent_alpha and all_delta_ok
     return is_schedulable, parent_alpha, parent_delta
 
-def try_reassign_components(system):
-    print("\n--- TRYING CORE REASSIGNMENTS ---")
-    cores = list(system["cores"].values())
-    components = list(system["components"].values())
-
-    for comp in components:
-        current_core = system["cores"][comp.core_name]
-        best_core = current_core
-        best_schedulable = False
-
-    
-        current_core.components.remove(comp)
-
-        for core in cores:
-            core.add_component(comp)
-            bdrs = [(c.bdr_alpha, c.bdr_delta) for c in core.components]
-
-            schedulable, _, _ = validate_theorem1(bdrs)
-
-            if schedulable:
-                best_core = core
-                best_schedulable = True
-                break  
-
-            core.components.remove(comp)
-
-        best_core.add_component(comp)
-        comp.core_name = best_core.name
-
-        if best_core != current_core:
-            print(f"  ✓ Component {comp.name} reassigned to Core {best_core.name}")
-        elif not best_schedulable:
-            print(f"  ✗ Component {comp.name} could not find schedulable core — keeping original")
-
-
 def run_analysis(system):
     print("\n--- STATIC SCHEDULABILITY ANALYSIS ---")
     core_bdr_summary = {}
@@ -414,17 +379,14 @@ def main():
             print("  ", comp)
             for task in comp.tasks:
                 print("    ", task)
-                    
-    print("\n--- Optimizing Core Assignments ---")
-    try_reassign_components(system)
-    
+                     
     print("\n--- Running Static Analysis ---")
     run_analysis(system)
 
     print("\n--- Running Simulation ---")
     run_simulation(system)
     
-    
+    print("\n--- Exporting results ---")
     
     execution_log, response_times = run_simulation(system)
     export_solution_csv(system, response_times)
