@@ -414,16 +414,18 @@ def main():
             print("  ", comp)
             for task in comp.tasks:
                 print("    ", task)
-
-    print("\n--- Running Simulation ---")
-    run_simulation(system)
-    
+                    
     print("\n--- Optimizing Core Assignments ---")
     try_reassign_components(system)
     
     print("\n--- Running Static Analysis ---")
     run_analysis(system)
 
+    print("\n--- Running Simulation ---")
+    run_simulation(system)
+    
+    
+    
     execution_log, response_times = run_simulation(system)
     export_solution_csv(system, response_times)
 
