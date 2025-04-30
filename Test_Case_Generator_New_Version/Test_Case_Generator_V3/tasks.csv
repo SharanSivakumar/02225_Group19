@@ -1,0 +1,11 @@
+task_name,task_type,wcet,period,min_inter_arrival,component_id,priority
+Task_1,periodic,6,75,,Radar_Sensor,1
+Task_2,sporadic,4,,125,Bitmap_Processor,2
+Task_3,periodic,7,60,,Sonar_Sensor,3
+Task_4,periodic,7,55,,Bitmap_Processor,4
+Task_5,periodic,4,26,,Radar_Sensor,1
+Task_6,sporadic,8,,108,Sonar_Sensor,2
+Task_7,periodic,7,67,,Proximity_Sensor,
+Task_8,periodic,3,81,,Control_Unit,
+Task_9,sporadic,3,,175,Image_Processor,
+Task_10,sporadic,1,,197,Communication_Unit,3

@@ -1,0 +1,103 @@
+Test Case Generator for DRTS Simulator :
+
+Overview:
+
+This Python script generates test case files-architecture.csv, budgets.csv, and tasks.csv-for the Distributed Real-Time Systems (DRTS) simulator. These files define the system architecture, hierarchical scheduling components, and both periodic and sporadic tasks. The generated test cases are designed to support the modeling, simulation, and schedulability analysis of Advanced Driver-Assistance Systems (ADAS) implemented on multicore platforms with hierarchical scheduling, as described in the [project requirements].
+
+Features:
+
+Realistic ADAS modeling: Uses a diverse set of component types (e.g., sensors, processors) for test case realism.
+
+Hierarchical scheduling: Supports both EDF (Earliest Deadline First) and RM (Rate Monotonic) scheduling policies at component and core levels.
+
+Priority assignment: RM priorities are assigned deterministically in a cyclical fashion (1–4); EDF priorities are left blank.
+
+Task diversity: Generates both hard periodic tasks and soft sporadic tasks, with appropriate timing parameters.
+
+Customizable: User specifies the number of cores, components, and tasks.
+
+Requirements:
+
+Python 3.x
+
+Usage:
+
+Save the script: Save the provided Python code (e.g., test_case_generator.py).
+
+Run the script: Execute the script from your terminal:
+
+text:
+
+python test_case_generator.py
+
+Input Parameters: When prompted, enter:
+
+Number of cores: Number of processor cores in the system.
+
+Number of components: Number of scheduling components (up to 34).
+
+Number of tasks: Number of tasks to generate.
+
+Example:
+
+text
+Enter the number of cores: 4
+Enter the number of components (up to 34): 8
+Enter the number of tasks: 20
+Output Files: The script generates three CSV files in the same directory:
+
+architecture.csv: Defines the hardware platform (core IDs, speed factors, schedulers).
+
+budgets.csv: Defines scheduling components (component IDs, budgets, periods, core assignments, priorities).
+
+tasks.csv: Defines tasks (task type, execution time, period or minimum inter-arrival, component assignment, priority).
+
+File Formats:
+
+architecture.csv:
+Column	Description
+core_id	Unique identifier for each core (e.g., "Core_1").
+speed_factor	Relative speed of the core (e.g., 1.0 for nominal speed).
+scheduler	Scheduling policy for the core ("EDF" or "RM").
+budgets.csv
+Column	Description
+component_id	Unique identifier for each component (e.g., "Camera_Sensor").
+scheduler	Scheduling policy for the component ("EDF" or "RM").
+budget	Resource budget allocated to the component (in time units).
+period	Time interval over which the budget is allocated (in time units).
+core_id	The core on which the component is scheduled (matches core_id in architecture).
+priority	Priority of the component (1–4 for RM, blank for EDF).
+
+tasks.csv:
+Column	Description
+task_name	Unique identifier for each task (e.g., "Task_1").
+task_type	Type of the task ("periodic" or "sporadic").
+wcet	Worst-Case Execution Time of the task (in time units).
+period	Period of the task (for periodic tasks; blank for sporadic).
+min_inter_arrival	Minimum inter-arrival time (for sporadic tasks; blank for periodic).
+component_id	The component to which the task is assigned (matches component_id in budgets.csv).
+priority	Priority of the task (1–4 for RM, blank for EDF).
+
+Notes:
+
+The speed_factor in architecture.csv affects the effective execution time of tasks assigned to that core.
+
+The scheduler field determines which scheduling policy is used at the core and component level (EDF or RM).
+
+Priorities are only relevant for RM scheduling and are assigned deterministically (cycled 1–4).
+
+The generated test cases are randomized. You can further customize the script as needed.
+
+The structure and fields are designed to support hierarchical scheduling analysis and simulation as described in the [project description].
+
+Example:
+
+If you set the number of cores to 2, the number of components to 4, and the number of tasks to 10, the script will generate:
+
+architecture.csv with 2 cores
+
+budgets.csv with 4 components (potentially multiple entries per component)
+
+tasks.csv with 10 tasks (a mix of periodic and sporadic)
+
+You can then use these files as input for your DRTS simulator or analysis tool.
