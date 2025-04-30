@@ -1,12 +1,9 @@
-import csv
+import csv, copy, os, sys, argparse
 from math import gcd, ceil, floor
 from functools import reduce
-import matplotlib.pyplot as plt
 from collections import defaultdict
 import numpy as np
-import argparse
-import os
-import sys
+
 
 class Task:
     def __init__(self, name, wcet, bcet, deadline, period, priority):
@@ -72,7 +69,7 @@ def load_system_model_from_csv(task_file, arch_file, budget_file):
             budget = float(row["budget"])
             period = float(row["period"])
             alpha = budget / period
-            delta = 0  #DELTA values are set later on in the code so all good!
+            delta = 1  #DELTA values are set later on in the code so all good!
             comp = Component(comp_id, core_id, scheduler, {"alpha": alpha, "delta": delta})
             components[comp_id] = comp
             cores[core_id].add_component(comp)
@@ -143,10 +140,10 @@ def half_half_transform(alpha, delta):
     if alpha >= 1.0:
         raise ValueError("Alpha must be < 1.0 for Half-Half transformation.")
     if delta <= 0:
-        delta = 1e-15  # Avoid divide by zero
+        delta = 1  # Avoid divide by zero
     Tsupply = delta / (2 * (1 - alpha))
     Csupply = alpha * Tsupply
-    return Csupply,Tsupply  # so Delta is always > 0 and Code doesnt end up breaking! Need to check this!
+    return Csupply,Tsupply  
 
 def run_simulation(system, max_time=None):
     cores = system["cores"]
@@ -155,6 +152,8 @@ def run_simulation(system, max_time=None):
     print(f"Simulating up to time = {sim_time} units")
 
     component_supply_info = {}
+    valid_components = set()
+
     for comp in system["components"].values():
         alpha, delta = comp.bdr_alpha, comp.bdr_delta
         try:
@@ -162,93 +161,70 @@ def run_simulation(system, max_time=None):
             component_supply_info[comp.name] = {
                 "Csupply": Csupply,
                 "Tsupply": Tsupply,
-                "budget_left": Csupply,  
+                "budget_left": Csupply,
                 "last_replenish": 0
             }
+            valid_components.add(comp.name)
         except ValueError as e:
-            print(f"Warning: Could not transform BDR for {comp.name}: {e}")
-            component_supply_info[comp.name] = {
-                "Csupply": 100,
-                "Tsupply": 100,
-                "budget_left": 100,
-                "last_replenish": 0
-            }
+            print(f"✗ ERROR: Skipping simulation for component {comp.name} due to invalid BDR (α={alpha}, Δ={delta}): {e}")
 
     execution_log = []
     response_times = defaultdict(list)
     released_tasks = defaultdict(list)
     task_state = {}
 
-
-    adjusted_wcets = {}
-    for task_name, task in system["tasks"].items():
-        comp_id = next(comp.name for comp in system["components"].values() if task in comp.tasks)
-        comp = system["components"][comp_id]
-        core = system["cores"][comp.core_name]
-        adjusted_wcets[task_name] = task.wcet / core.speed
-
     for time in range(sim_time):
         tick_log = {}
 
         for core in cores.values():
-            tick_log[core.name] = "Idle"  # Default state!
-            
+            tick_log[core.name] = "Idle"
             component_candidates = {}
-            
+
             for comp in core.components:
-                if comp.bdr_alpha is None:
-                    if time == 0:
-                        print(f"Skipping simulation for component {comp.name} — unschedulable by analysis.")
+                if comp.name not in valid_components:
                     continue
 
                 supply = component_supply_info[comp.name]
-                
+
                 if (time - supply["last_replenish"]) >= supply["Tsupply"]:
                     supply["budget_left"] = supply["Csupply"]
                     supply["last_replenish"] = time
-                
-                if time < comp.bdr_delta:
-                    continue
-                if supply["budget_left"] <= 0:
+
+                if time < comp.bdr_delta or supply["budget_left"] <= 0:
                     continue
 
                 active_tasks = []
-                
                 for task in comp.tasks:
                     if time % task.period == 0:
                         released_tasks[task.name].append(time)
                         task_state[task.name] = {
-                            "remaining": adjusted_wcets[task.name],
+                            "remaining": task.wcet,  # Use original WCET
                             "start": None
                         }
-                    
                     if task.name in task_state and task_state[task.name]["remaining"] > 0:
                         active_tasks.append(task)
-               
+
                 if active_tasks:
                     if comp.scheduling == "FPS":
                         active_tasks.sort(key=lambda x: x.priority)
                     elif comp.scheduling == "EDF":
                         active_tasks.sort(key=lambda x: time + x.deadline - (time % x.period))
-                    
+
                     component_candidates[comp.name] = (comp, active_tasks[0])
-            
-           
+
             if not component_candidates:
                 continue
+
             selected_comp_name, (selected_comp, selected_task) = next(iter(component_candidates.items()))
-            
-            task_state[selected_task.name]["remaining"] -= 1.0
+
+            # Execute task using proper speed scaling
             if task_state[selected_task.name]["start"] is None:
                 task_state[selected_task.name]["start"] = time
-            
-   
+
+            task_state[selected_task.name]["remaining"] -= 1.0 / core.speed  # Use speed-corrected decrement
             component_supply_info[selected_comp.name]["budget_left"] -= 1.0
-            
-        
             tick_log[core.name] = selected_task.name
-            
-         
+
             if task_state[selected_task.name]["remaining"] <= 0:
                 release = released_tasks[selected_task.name].pop(0)
                 rt = time - release + 1
@@ -257,7 +233,6 @@ def run_simulation(system, max_time=None):
 
         execution_log.append(tick_log)
 
-    
     print("\n--- SIMULATION RESULTS ---")
     for task in system["tasks"].values():
         rts = response_times.get(task.name, [])
@@ -279,6 +254,8 @@ def run_simulation(system, max_time=None):
     total_sim_time = sim_time
     for core in cores.values():
         for comp in core.components:
+            if comp.name not in valid_components:
+                continue
             comp_exec_time = sum(
                 1 for tick in execution_log for cname, tname in tick.items()
                 if cname == core.name and any(t.name == tname for t in comp.tasks)
@@ -301,7 +278,7 @@ def sbf_bdr(alpha, delta, t):
     return max(0, alpha * (t - delta))
 
 def find_min_bdr_params(tasks, scheduling, max_time=100, verbose=False):
-    for delta in range(0, max_time + 1):  # Start at delta = 1
+    for delta in range(1, max_time + 1):  # Start at delta = 1
         for alpha in np.linspace(0.01, 1.0, 200):  # Finer resolution
             ok = True
             for t in range(1, max_time + 1):
@@ -329,6 +306,15 @@ def validate_theorem1(child_bdrs, parent_alpha=1.0, parent_delta=0):
     is_schedulable = total_alpha <= parent_alpha and all_delta_ok
     return is_schedulable, parent_alpha, parent_delta
 
+def derive_parent_bdr_from_children(child_bdrs, epsilon=1e-6):
+    if not child_bdrs:
+        return None, None
+    total_alpha = sum(alpha for alpha, _ in child_bdrs)
+    min_delta = min(delta for _, delta in child_bdrs)
+    parent_alpha = round(total_alpha, 6)
+    parent_delta = max(min_delta - epsilon, 0)
+    return parent_alpha, parent_delta
+
 def run_analysis(system):
     print("\n--- STATIC SCHEDULABILITY ANALYSIS ---")
     core_bdr_summary = {}
@@ -351,43 +337,53 @@ def run_analysis(system):
     print("\n--- VALIDATING CORES WITH THEOREM 1 (Feng and Mok) ---")
     for core in system["cores"].values():
         child_bdRs = core_bdr_summary.get(core.name, [])
-        is_schedulable, parent_alpha, parent_delta = validate_theorem1(child_bdRs)
+        parent_alpha, parent_delta = derive_parent_bdr_from_children(child_bdRs)
+        is_schedulable, _, _ = validate_theorem1(child_bdRs, parent_alpha, parent_delta)
         result = "✓" if is_schedulable else "✗"
-        print(f"Core {core.name}: Parent BDR(α={parent_alpha}, ∆={parent_delta}) ⇒ {result}")
+        print(f"Core {core.name}: Derived Parent BDR(α={parent_alpha}, ∆={parent_delta}) ⇒ {result}")
+
 
 def main():
-    
     parser = argparse.ArgumentParser(description="Hierarchical Scheduling Simulator with BDR Model")
     parser.add_argument('input_dir', type=str, help="Directory containing tasks.csv, architecture.csv, and budgets.csv")
     parser.add_argument('--output', type=str, default="./Output/solution.csv", help="Path to output CSV file")
     args = parser.parse_args()
+
     tasks_file = os.path.join(args.input_dir, "tasks.csv")
     arch_file = os.path.join(args.input_dir, "architecture.csv")
     budgets_file = os.path.join(args.input_dir, "budgets.csv")
 
+    # Verify input files exist
     for path in [tasks_file, arch_file, budgets_file]:
         if not os.path.isfile(path):
             print(f"Error: Required file not found: {path}")
             sys.exit(1)
 
-    system = load_system_model_from_csv(tasks_file, arch_file, budgets_file)
-    
+    # Load system model once
+    original_system = load_system_model_from_csv(tasks_file, arch_file, budgets_file)
+
+    # Display system overview (optional)
     print("=== System Overview ===")
-    for core in system["cores"].values():
+    for core in original_system["cores"].values():
         print(core)
         for comp in core.components:
             print("  ", comp)
             for task in comp.tasks:
                 print("    ", task)
-                     
-    print("\n--- Running Static Analysis ---")
-    run_analysis(system)
 
+    # Run static analysis (on a deep copy)
+    print("\n--- Running Static Analysis ---")
+    analysis_system = copy.deepcopy(original_system)
+    run_analysis(analysis_system)
+
+    # Run simulation (on another independent copy)
     print("\n--- Running Simulation ---")    
-    execution_log, response_times = run_simulation(system)
-    
+    simulation_system = copy.deepcopy(original_system)
+    execution_log, response_times = run_simulation(simulation_system)
+
+    # Export results
     print("\n--- Exporting results ---")
-    export_solution_csv(system, response_times)
+    export_solution_csv(simulation_system, response_times)
 
 if __name__ == "__main__":
     main()
