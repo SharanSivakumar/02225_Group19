@@ -143,10 +143,10 @@ def half_half_transform(alpha, delta):
     if alpha >= 1.0:
         raise ValueError("Alpha must be < 1.0 for Half-Half transformation.")
     if delta <= 0:
-        delta = 1e-6  # Avoid divide by zero
+        delta = 1e-15  # Avoid divide by zero
     Tsupply = delta / (2 * (1 - alpha))
     Csupply = alpha * Tsupply
-    return max(1, ceil(Csupply)), max(1, ceil(Tsupply))  # so Delta is always > 0 and Code doesnt end up breaking! Need to check this!
+    return Csupply,Tsupply  # so Delta is always > 0 and Code doesnt end up breaking! Need to check this!
 
 def run_simulation(system, max_time=None):
     cores = system["cores"]
@@ -301,7 +301,7 @@ def sbf_bdr(alpha, delta, t):
     return max(0, alpha * (t - delta))
 
 def find_min_bdr_params(tasks, scheduling, max_time=100, verbose=False):
-    for delta in range(1, max_time + 1):  # Start at delta = 1
+    for delta in range(0, max_time + 1):  # Start at delta = 1
         for alpha in np.linspace(0.01, 1.0, 200):  # Finer resolution
             ok = True
             for t in range(1, max_time + 1):
@@ -383,12 +383,10 @@ def main():
     print("\n--- Running Static Analysis ---")
     run_analysis(system)
 
-    print("\n--- Running Simulation ---")
-    run_simulation(system)
+    print("\n--- Running Simulation ---")    
+    execution_log, response_times = run_simulation(system)
     
     print("\n--- Exporting results ---")
-    
-    execution_log, response_times = run_simulation(system)
     export_solution_csv(system, response_times)
 
 if __name__ == "__main__":
