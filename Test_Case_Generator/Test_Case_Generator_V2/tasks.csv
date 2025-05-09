@@ -1,0 +1,11 @@
+task_name,wcet,period,component_id,priority
+Task_1,6,50,Radar_Sensor,1
+Task_2,2,73,Radar_Sensor,2
+Task_3,3,61,Radar_Sensor,3
+Task_4,3,26,GPS_Sensor,
+Task_5,4,63,Bitmap_Processor,
+Task_6,5,96,Radar_Sensor,4
+Task_7,1,84,GPS_Sensor,
+Task_8,8,60,Radar_Sensor,5
+Task_9,6,86,Sonar_Sensor,
+Task_10,1,87,Bitmap_Processor,

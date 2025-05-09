@@ -45,44 +45,31 @@ def generate_test_case(num_cores, num_components):
                 "core_id": core_id,
                 "priority": priority,
             })
-            if scheduler == "RM":
-                priority_counter += 1
-                if priority_counter > 4:
-                    priority_counter = 1
+            priority_counter = priority_counter + 1 if priority_counter < 5 and scheduler == "RM" else 1 if priority_counter == 5 and scheduler == "RM" else priority_counter
 
     return architectures, budgets
 
 def generate_tasks(budgets, num_tasks):
-    """Generates tasks.csv data based on available components, with periodic/sporadic logic."""
+    """Generates tasks.csv data based on available components."""
     tasks = []
     priority_counter = 1
     for i in range(1, num_tasks + 1):
         task_name = f"Task_{i}"
-        task_type = random.choice(["periodic", "sporadic"])
         wcet = random.randint(1, 8)
-        if task_type == "periodic":
-            period = random.randint(20, 100)
-            min_inter_arrival = ""
-        else:
-            period = ""
-            min_inter_arrival = random.randint(50, 200)
+        period = random.randint(20, 100)
         component_id = random.choice(budgets)["component_id"]
         scheduler = next((budget["scheduler"] for budget in budgets if budget["component_id"] == component_id), None)
         priority = priority_counter if scheduler == "RM" else ""
         tasks.append({
             "task_name": task_name,
-            "task_type": task_type,
             "wcet": wcet,
             "period": period,
-            "min_inter_arrival": min_inter_arrival,
             "component_id": component_id,
             "priority": priority,
         })
-        if scheduler == "RM":
-            priority_counter += 1
-            if priority_counter > 4:
-                priority_counter = 1
+        priority_counter = priority_counter + 1 if priority_counter < 5 and scheduler == "RM" else 1 if priority_counter == 5 and scheduler == "RM" else priority_counter
     return tasks
+
 
 def write_csv(filename, data, fieldnames):
     """Writes data to a CSV file."""
@@ -90,6 +77,7 @@ def write_csv(filename, data, fieldnames):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(data)
+
 
 if __name__ == "__main__":
     num_cores = int(input("Enter the number of cores: "))
@@ -103,7 +91,6 @@ if __name__ == "__main__":
     write_csv(
         "budgets.csv", budgets, ["component_id", "scheduler", "budget", "period", "core_id", "priority"]
     )
-    tasks_fieldnames = ["task_name", "task_type", "wcet", "period", "min_inter_arrival", "component_id", "priority"]
-    write_csv("tasks.csv", tasks, tasks_fieldnames)
+    write_csv("tasks.csv", tasks, ["task_name", "wcet", "period", "component_id", "priority"])
 
     print("Test cases generated successfully!")
