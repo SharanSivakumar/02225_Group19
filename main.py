@@ -1,8 +1,22 @@
-import csv, copy, os, sys, argparse
+import csv, copy, os, sys, argparse, datetime
 from math import gcd, ceil, floor
 from functools import reduce
 from collections import defaultdict
 import numpy as np
+from datetime import datetime
+
+class Logger:
+    def __init__(self, log_file_path):
+        self.terminal = sys.__stdout__
+        self.log = open(log_file_path, "w", encoding="utf-8")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
 
 
 class Task:
@@ -349,20 +363,25 @@ def main():
     parser.add_argument('--output', type=str, default="./Output/solution.csv", help="Path to output CSV file")
     args = parser.parse_args()
 
+    timestamp = datetime.now().strftime("%d-%m-%Y")
+    log_path = f"./Output/Analysis_Logs_{timestamp}.txt"
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    sys.stdout = Logger(log_path)
+    sys.stderr = sys.stdout
+
+    print(f"[INFO] Console output is being saved to: {log_path}\n")
+
     tasks_file = os.path.join(args.input_dir, "tasks.csv")
     arch_file = os.path.join(args.input_dir, "architecture.csv")
     budgets_file = os.path.join(args.input_dir, "budgets.csv")
 
-    # Verify input files exist
     for path in [tasks_file, arch_file, budgets_file]:
         if not os.path.isfile(path):
             print(f"Error: Required file not found: {path}")
             sys.exit(1)
 
-    # Load system model once
     original_system = load_system_model_from_csv(tasks_file, arch_file, budgets_file)
 
-    # Display system overview (optional)
     print("=== System Overview ===")
     for core in original_system["cores"].values():
         print(core)
@@ -371,19 +390,20 @@ def main():
             for task in comp.tasks:
                 print("    ", task)
 
-    # Run static analysis (on a deep copy)
     print("\n--- Running Static Analysis ---")
     analysis_system = copy.deepcopy(original_system)
     run_analysis(analysis_system)
 
-    # Run simulation (on another independent copy)
     print("\n--- Running Simulation ---")    
     simulation_system = copy.deepcopy(original_system)
     execution_log, response_times = run_simulation(simulation_system)
 
-    # Export results
     print("\n--- Exporting results ---")
-    export_solution_csv(simulation_system, response_times)
+    export_solution_csv(simulation_system, response_times, filename=args.output)
+
+    print(f"\n[INFO] Log saved to: {log_path}")
+
+
 
 if __name__ == "__main__":
     main()
