@@ -5,7 +5,7 @@ This project implements a fixed-priority preemptive scheduler using Rate Monoton
 ## Files
 
 - `main.py` — Main script for loading input, running RTA and simulation, and displaying results.
-- `Test_Case_Generator/` — Folder containing input CSV files with task sets.
+- `Test_Case_Generator/` — Folder containing input CSV files with task sets and Custom Test Case Generator.
 - `Output` - Folder containing the  `solution.csv` along with the `Analysis Log`.
 
 
