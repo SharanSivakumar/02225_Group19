@@ -1,6 +1,6 @@
 # 02225_Group19
 
-This project implements a fixed-priority preemptive scheduler using Rate Monotonic Scheduling (RMS).
+This project models, simulates and analyzes hierarchical Scheduling on heterogeneous multicore platforms. It supports both Earliest Deadline First (EDF) and Fixed Priority Scheduling (FPS) using Rate Monotonic (RM) priorities. It also implements analysis using the Bounded Delay Resource (BDR) model, enabling compositional schedulability checks.
 
 ## Files
 
