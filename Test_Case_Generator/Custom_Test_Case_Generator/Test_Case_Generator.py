@@ -56,7 +56,7 @@ def generate_tasks(budgets, num_tasks):
     for i in range(1, num_tasks + 1):
         task_name = f"Task_{i}"
         wcet = random.randint(1, 8)
-        period = random.randint(20, 100)
+        period = random.randint(10, 50)
         component_id = random.choice(budgets)["component_id"]
         scheduler = next((budget["scheduler"] for budget in budgets if budget["component_id"] == component_id), None)
         priority = priority_counter if scheduler == "RM" else ""
